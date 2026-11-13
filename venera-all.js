@@ -462,6 +462,17 @@ var VeneraRuntime = (function () {
         if (Object.prototype.hasOwnProperty.call(headers, k)) { merged[k] = headers[k]; }
       }
     }
+    // 很多站点缺 Referer 就 403，这里补上同源 Referer（除非源自己指定了）
+    var hasReferer = false;
+    for (var hk in merged) {
+      if (Object.prototype.hasOwnProperty.call(merged, hk) && String(hk).toLowerCase() === "referer") {
+        hasReferer = true;
+      }
+    }
+    if (!hasReferer) {
+      var m = /^(https?:\/\/[^\/]+)/i.exec(String(url));
+      if (m) { merged["Referer"] = m[1] + "/"; }
+    }
     var cookie = cookieHeaderFor(url);
     if (cookie) { merged["Cookie"] = cookie; }
     return merged;

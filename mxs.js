@@ -461,6 +461,17 @@ var VeneraRuntime = (function () {
         if (Object.prototype.hasOwnProperty.call(headers, k)) { merged[k] = headers[k]; }
       }
     }
+    // 很多站点缺 Referer 就 403，这里补上同源 Referer（除非源自己指定了）
+    var hasReferer = false;
+    for (var hk in merged) {
+      if (Object.prototype.hasOwnProperty.call(merged, hk) && String(hk).toLowerCase() === "referer") {
+        hasReferer = true;
+      }
+    }
+    if (!hasReferer) {
+      var m = /^(https?:\/\/[^\/]+)/i.exec(String(url));
+      if (m) { merged["Referer"] = m[1] + "/"; }
+    }
     var cookie = cookieHeaderFor(url);
     if (cookie) { merged["Cookie"] = cookie; }
     return merged;
@@ -1060,6 +1071,44 @@ function __pages(mangaID, chapterID) {
   return out;
 }
 
+/**
+ * 多线路重试：站点配置里常带 settings.domains（备选域名列表），
+ * 一个域名被 403/超时，就依次换下一个，再不行换简/繁语言前缀。
+ */
+function __withMirrors(siteName, fn) {
+  try {
+    return fn();
+  } catch (firstError) {
+    var inst = __instanceCache;
+    var domains = [];
+    try {
+      var opts = inst && inst.settings && inst.settings.domains && inst.settings.domains.options;
+      if (opts) {
+        for (var i = 0; i < opts.length; i++) {
+          if (opts[i] && opts[i].value) { domains.push(opts[i].value); }
+        }
+      }
+    } catch (e) { domains = []; }
+    if (domains.length === 0) { throw firstError; }
+
+    var langs = ["cn", "tw"];
+    var errors = [String(firstError)];
+    for (var li = 0; li < langs.length; li++) {
+      for (var di = 0; di < domains.length; di++) {
+        try {
+          if (inst.settings.language) { inst.settings.language.default = langs[li]; }
+          inst.settings.domains.default = domains[di];
+          console.log("[venera] 换线路重试：" + langs[li] + "." + domains[di]);
+          return fn();
+        } catch (e2) {
+          errors.push(langs[li] + "." + domains[di] + " -> " + String(e2));
+        }
+      }
+    }
+    throw new Error(siteName + " 所有线路都失败：" + errors.slice(0, 4).join(" | "));
+  }
+}
+
 var source = {
   id: __META.id,
   name: __META.name,
@@ -1067,8 +1116,16 @@ var source = {
   version: __META.version || 1,
   baseUrl: "",
   icon: "",
-  search: __search,
-  detail: __detail,
-  chapters: __chapters,
-  pages: __pages
+  search: function (q, p) {
+    return __withMirrors(__META.name, function () { return __search(q, p); });
+  },
+  detail: function (id) {
+    return __withMirrors(__META.name, function () { return __detail(id); });
+  },
+  chapters: function (id) {
+    return __withMirrors(__META.name, function () { return __chapters(id); });
+  },
+  pages: function (id, cid) {
+    return __withMirrors(__META.name, function () { return __pages(id, cid); });
+  }
 };
