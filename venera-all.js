@@ -1247,6 +1247,98 @@ function __stripSitePrefix(id) {
   return idx > 0 ? text.slice(idx + 2) : text;
 }
 
+// ===== 源内浏览：推荐 / 分类 =====
+
+function __mapComics(list, inst, siteKey) {
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    var item = __toItem(list[i], inst, siteKey);
+    if (item && item.mangaID) { out.push(item); }
+  }
+  return out;
+}
+
+/** Venera 的 explore：数组，每项有 load()，返回 {"分区名":[comic]} 或 {comics:[...]} */
+function __exploreOn(siteKey) {
+  var inst = __instance(siteKey);
+  var pages = inst.explore;
+  if (!pages || !pages.length) { return []; }
+  var out = [];
+  for (var i = 0; i < pages.length; i++) {
+    var page = pages[i];
+    if (!page || typeof page.load !== "function") { continue; }
+    var res = page.load();
+    if (!res) { continue; }
+    if (Object.prototype.toString.call(res) === "[object Array]") {
+      out.push({ title: page.title || "推荐", items: __mapComics(res, inst, siteKey) });
+    } else if (res.comics && Object.prototype.toString.call(res.comics) === "[object Array]") {
+      out.push({ title: page.title || "推荐", items: __mapComics(res.comics, inst, siteKey) });
+    } else {
+      for (var key in res) {
+        if (!Object.prototype.hasOwnProperty.call(res, key)) { continue; }
+        var arr = res[key];
+        if (Object.prototype.toString.call(arr) !== "[object Array]") { continue; }
+        out.push({ title: String(key), items: __mapComics(arr, inst, siteKey) });
+      }
+    }
+  }
+  return out;
+}
+
+/** Venera 的 category.parts：categories 与 categoryParams 是平行数组 */
+function __categoryPartsOn(siteKey) {
+  var inst = __instance(siteKey);
+  var cat = inst.category;
+  if (!cat || !cat.parts || !cat.parts.length) { return []; }
+  var out = [];
+  for (var i = 0; i < cat.parts.length; i++) {
+    var part = cat.parts[i];
+    if (!part || !part.categories || !part.categories.length) { continue; }
+    var items = [];
+    for (var j = 0; j < part.categories.length; j++) {
+      var label = part.categories[j];
+      var param = (part.categoryParams && part.categoryParams[j] != null)
+        ? part.categoryParams[j] : label;
+      items.push({ label: String(label), param: String(param) });
+    }
+    out.push({ name: part.name || "分类", items: items });
+  }
+  return out;
+}
+
+/** 按分类取列表：categoryComics.load(category, param, options, page) */
+function __categoryListOn(siteKey, partIndex, param, page) {
+  var inst = __instance(siteKey);
+  var cc = inst.categoryComics;
+  if (!cc || typeof cc.load !== "function") { return []; }
+
+  var options = [];
+  if (cc.optionList) {
+    for (var i = 0; i < cc.optionList.length; i++) {
+      var group = cc.optionList[i];
+      var first = (group && group.options && group.options.length) ? String(group.options[0]) : "";
+      options.push(first.split("-")[0]);
+    }
+  }
+
+  // 找出对应 label（部分源的 load 依赖 category 名称）
+  var label = String(param);
+  try {
+    var parts = __categoryPartsOn(siteKey);
+    var chosen = parts[typeof partIndex === "number" ? partIndex : 0];
+    if (chosen && chosen.items) {
+      for (var k = 0; k < chosen.items.length; k++) {
+        if (chosen.items[k].param === String(param)) { label = chosen.items[k].label; }
+      }
+    }
+  } catch (e) { /* 忽略 */ }
+
+  var pageNumber = (typeof page === "number" && page >= 0) ? page + 1 : 1;
+  var res = cc.load(label, String(param), options, pageNumber);
+  if (!res || !res.comics) { return []; }
+  return __mapComics(res.comics, inst, siteKey);
+}
+
 /** 造一个「只绑定某个站点」的源条目 */
 function __siteSource(siteKey, siteName) {
   return {
@@ -1267,6 +1359,15 @@ function __siteSource(siteKey, siteName) {
     },
     pages: function (id, cid) {
       return __withMirrors(siteKey, function () { return __pagesOn(siteKey, __stripSitePrefix(id), cid); });
+    },
+    explore: function () {
+      return __withMirrors(siteKey, function () { return __exploreOn(siteKey); });
+    },
+    categoryParts: function () {
+      return __withMirrors(siteKey, function () { return __categoryPartsOn(siteKey); });
+    },
+    categoryList: function (part, param, page) {
+      return __withMirrors(siteKey, function () { return __categoryListOn(siteKey, part, param, page); });
     }
   };
 }
