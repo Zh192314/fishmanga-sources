@@ -1238,11 +1238,68 @@ function __pages(mangaID, chapterID) {
   });
 }
 
+// ===== 多源清单：一个文件注册 N 个源（新版 App 会读取这个数组） =====
+
+/** 条目 id 形如 "baozi::123"，取回真实 id */
+function __stripSitePrefix(id) {
+  var text = id == null ? "" : String(id);
+  var idx = text.indexOf("::");
+  return idx > 0 ? text.slice(idx + 2) : text;
+}
+
+/** 造一个「只绑定某个站点」的源条目 */
+function __siteSource(siteKey, siteName) {
+  return {
+    id: "venera." + siteKey,
+    name: siteName,
+    lang: "zh",
+    version: 1,
+    baseUrl: "",
+    icon: "",
+    search: function (q, p) {
+      return __withMirrors(siteKey, function () { return __searchOn(siteKey, q, p); });
+    },
+    detail: function (id) {
+      return __withMirrors(siteKey, function () { return __detailOn(siteKey, __stripSitePrefix(id)); });
+    },
+    chapters: function (id) {
+      return __withMirrors(siteKey, function () { return __chaptersOn(siteKey, __stripSitePrefix(id)); });
+    },
+    pages: function (id, cid) {
+      return __withMirrors(siteKey, function () { return __pagesOn(siteKey, __stripSitePrefix(id), cid); });
+    }
+  };
+}
+
+var sources = [
+  __siteSource("baozi", "包子漫画"),
+  __siteSource("copy_manga", "拷贝漫画"),
+  __siteSource("manhuagui", "漫画柜"),
+  __siteSource("manhuaren", "漫画人"),
+  __siteSource("zaimanhua", "再漫画"),
+  __siteSource("ikmmh", "爱看漫"),
+  __siteSource("ykmh", "优酷漫画"),
+  __siteSource("mh1234", "漫画1234"),
+  __siteSource("mxs", "漫小肆"),
+  __siteSource("goda", "GoDa漫画"),
+  __siteSource("hot_manga", "热辣漫画"),
+  __siteSource("happy", "嗨皮漫画"),
+  __siteSource("ccc", "CCC追漫台"),
+  __siteSource("manwaba", "漫蛙吧"),
+  __siteSource("jcomic", "jcomic.net"),
+  __siteSource("komiic", "Komiic"),
+  __siteSource("manga_dex", "MangaDex"),
+  __siteSource("comick", "comick"),
+  __siteSource("shonen_jump_plus", "少年ジャンプ＋"),
+  __siteSource("comic_walker", "カドコミ")
+];
+
+// ===== 合集源：不带站点前缀时自动选站（老版本 App 只认这个） =====
 var source = {
   id: "venera",
   name: "Venera 多源（20 站）",
   lang: "zh",
-  version: 3,
+  version: 4,
   baseUrl: "",
   icon: "",
   search: __search,
