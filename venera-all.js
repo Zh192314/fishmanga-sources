@@ -2,6 +2,7 @@
  * Venera 多源合一（自动生成，勿手改）
  * 用法：搜索框里用「站点名 空格 关键词」，例如： baozi 海贼
  * 可用站点：baozi copy_manga manhuagui manhuaren zaimanhua ikmmh ykmh mh1234 mxs goda hot_manga happy ccc manwaba jcomic komiic manga_dex comick shonen_jump_plus comic_walker
+ * 线路回退：站点配置里的备用域名会自动依次尝试。
  * 由 tools/venera/build_multi.mjs 生成。
  */
 /**
@@ -914,6 +915,7 @@ function error() { }
 var __captured = null;
 var __instances = {};
 
+/** 去掉配置里的 async / await（同步宿主里它们只是空转） */
 function __stripAsync(code) {
   var out = "", i = 0, n = code.length, state = 0;
   while (i < n) {
@@ -954,12 +956,6 @@ function __stripAsync(code) {
   return out;
 }
 
-function __siteOrThrow(siteKey) {
-  var site = __SITES[siteKey];
-  if (!site) { throw new Error("未知站点：" + siteKey); }
-  return site;
-}
-
 function __configText(site) {
   if (site.inline) { return site.inline; }
   var res = http.get(site.url, { "User-Agent": "FishManga/1.0 (venera-loader)" });
@@ -972,7 +968,8 @@ function __configText(site) {
 
 function __instance(siteKey) {
   if (__instances[siteKey]) { return __instances[siteKey]; }
-  var site = __siteOrThrow(siteKey);
+  var site = __SITES[siteKey];
+  if (!site) { throw new Error("未知站点：" + siteKey); }
   var raw = __configText(site);
   var m = /class\s+([A-Za-z_$][A-Za-z0-9_$]*)\s+extends\s+ComicSource/.exec(raw);
   if (!m) { throw new Error(site.name + " 不是有效的 Venera 配置"); }
@@ -985,6 +982,48 @@ function __instance(siteKey) {
   } catch (e) { console.log("[venera] " + site.name + " init() 抛错（已忽略）：" + e); }
   __instances[siteKey] = __captured;
   return __instances[siteKey];
+}
+
+/** 站点配置里声明的备用域名列表 */
+function __domainOptions(inst) {
+  var out = [];
+  try {
+    var opts = inst && inst.settings && inst.settings.domains && inst.settings.domains.options;
+    if (opts) {
+      for (var i = 0; i < opts.length; i++) {
+        if (opts[i] && opts[i].value) { out.push(opts[i].value); }
+      }
+    }
+  } catch (e) { out = []; }
+  return out;
+}
+
+/** 多线路重试：一个域名挂了就换下一个，再不行换 cn/tw */
+function __withMirrors(siteKey, fn) {
+  try {
+    return fn();
+  } catch (firstError) {
+    var inst;
+    try { inst = __instance(siteKey); } catch (e) { throw firstError; }
+    var domains = __domainOptions(inst);
+    if (domains.length === 0) { throw firstError; }
+
+    var langs = ["cn", "tw"];
+    var errors = [String(firstError)];
+    for (var li = 0; li < langs.length; li++) {
+      for (var di = 0; di < domains.length; di++) {
+        try {
+          if (inst.settings.language) { inst.settings.language.default = langs[li]; }
+          inst.settings.domains.default = domains[di];
+          console.log("[venera] " + __SITES[siteKey].name + " 换线路：" + langs[li] + "." + domains[di]);
+          return fn();
+        } catch (e2) {
+          errors.push(langs[li] + "." + domains[di] + " -> " + String(e2));
+        }
+      }
+    }
+    throw new Error(__SITES[siteKey].name + " 所有线路都失败：" + errors.slice(0, 5).join(" | "));
+  }
 }
 
 function __abs(url, inst) {
@@ -1002,9 +1041,7 @@ function __abs(url, inst) {
 function __splitID(id) {
   var text = id == null ? "" : String(id);
   var idx = text.indexOf("::");
-  if (idx > 0) {
-    return { site: text.slice(0, idx), real: text.slice(idx + 2) };
-  }
+  if (idx > 0) { return { site: text.slice(0, idx), real: text.slice(idx + 2) }; }
   return { site: __DEFAULT_SITE, real: text };
 }
 
@@ -1053,10 +1090,9 @@ function __fromDetails(details, inst, siteKey, realID) {
   };
 }
 
-/** 解析 "站点 关键词"，也支持 "站点:关键词"；没有站点前缀就用默认站点 */
-function __parseQuery(query, page) {
+/** 解析「站点 关键词」/「站点:关键词」；输 ? 列站点表 */
+function __parseQuery(query) {
   var text = query == null ? "" : String(query).trim();
-  // 查站点表
   if (text === "?" || text === "帮助" || text === "sites") {
     var names = [];
     for (var k in __SITES) {
@@ -1070,44 +1106,40 @@ function __parseQuery(query, page) {
   if (m && __SITES[m[1]] && m[2].trim()) {
     return { site: m[1], keyword: m[2].trim() };
   }
-  // 只输站点名 -> 该站的热门/推荐（配置支持的话用空关键词）
   if (text && __SITES[text]) {
     return { site: text, keyword: "" };
   }
   return { site: __DEFAULT_SITE, keyword: text };
 }
 
-function __search(query, page) {
-  var parsed = __parseQuery(query, page);
-  var inst = __instance(parsed.site);
+function __searchOn(siteKey, keyword, page) {
+  var inst = __instance(siteKey);
   if (!inst.search || typeof inst.search.load !== "function") {
-    throw new Error(__SITES[parsed.site].name + " 没有提供搜索接口");
+    throw new Error(__SITES[siteKey].name + " 没有提供搜索接口");
   }
   var pageNumber = (typeof page === "number" && page >= 0) ? page + 1 : 1;
-  var res = inst.search.load(parsed.keyword, [], pageNumber);
+  var res = inst.search.load(keyword, [], pageNumber);
   if (!res || !res.comics) { return []; }
   var out = [];
   for (var i = 0; i < res.comics.length; i++) {
-    var item = __toItem(res.comics[i], inst, parsed.site);
+    var item = __toItem(res.comics[i], inst, siteKey);
     if (item && item.mangaID) { out.push(item); }
   }
-  console.log("[venera] " + __SITES[parsed.site].name + " 「" + parsed.keyword + "」命中 " + out.length + " 条");
+  console.log("[venera] " + __SITES[siteKey].name + " 「" + keyword + "」命中 " + out.length + " 条");
   return out;
 }
 
-function __detail(mangaID) {
-  var parts = __splitID(mangaID);
-  var inst = __instance(parts.site);
+function __detailOn(siteKey, realID) {
+  var inst = __instance(siteKey);
   if (!inst.comic || typeof inst.comic.loadInfo !== "function") {
-    throw new Error(__SITES[parts.site].name + " 没有提供详情接口");
+    throw new Error(__SITES[siteKey].name + " 没有提供详情接口");
   }
-  return __fromDetails(inst.comic.loadInfo(parts.real), inst, parts.site, parts.real);
+  return __fromDetails(inst.comic.loadInfo(realID), inst, siteKey, realID);
 }
 
-function __chapters(mangaID) {
-  var parts = __splitID(mangaID);
-  var inst = __instance(parts.site);
-  var details = inst.comic.loadInfo(parts.real);
+function __chaptersOn(siteKey, realID) {
+  var inst = __instance(siteKey);
+  var details = inst.comic.loadInfo(realID);
   var out = [];
   var map = details ? details.chapters : null;
   if (!map) { return out; }
@@ -1129,28 +1161,57 @@ function __chapters(mangaID) {
   return out;
 }
 
-function __pages(mangaID, chapterID) {
-  var parts = __splitID(mangaID);
-  var inst = __instance(parts.site);
+function __pagesOn(siteKey, realID, chapterID) {
+  var inst = __instance(siteKey);
   if (!inst.comic || typeof inst.comic.loadEp !== "function") {
-    throw new Error(__SITES[parts.site].name + " 没有提供图片接口");
+    throw new Error(__SITES[siteKey].name + " 没有提供图片接口");
   }
-  var res = inst.comic.loadEp(parts.real, chapterID);
+  var res = inst.comic.loadEp(realID, chapterID);
   var images = (res && res.images) ? res.images : [];
   var out = [];
   for (var i = 0; i < images.length; i++) {
     var url = __abs(images[i], inst);
     if (url) { out.push(url); }
   }
-  console.log("[venera] " + __SITES[parts.site].name + " 图片 " + out.length + " 页");
+  console.log("[venera] " + __SITES[siteKey].name + " 图片 " + out.length + " 页");
   return out;
+}
+
+// ===== 对外四个接口（都带线路回退） =====
+
+function __search(query, page) {
+  var parsed = __parseQuery(query);
+  return __withMirrors(parsed.site, function () {
+    return __searchOn(parsed.site, parsed.keyword, page);
+  });
+}
+
+function __detail(mangaID) {
+  var parts = __splitID(mangaID);
+  return __withMirrors(parts.site, function () {
+    return __detailOn(parts.site, parts.real);
+  });
+}
+
+function __chapters(mangaID) {
+  var parts = __splitID(mangaID);
+  return __withMirrors(parts.site, function () {
+    return __chaptersOn(parts.site, parts.real);
+  });
+}
+
+function __pages(mangaID, chapterID) {
+  var parts = __splitID(mangaID);
+  return __withMirrors(parts.site, function () {
+    return __pagesOn(parts.site, parts.real, chapterID);
+  });
 }
 
 var source = {
   id: "venera",
   name: "Venera 多源（20 站）",
   lang: "zh",
-  version: 1,
+  version: 2,
   baseUrl: "",
   icon: "",
   search: __search,
