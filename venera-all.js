@@ -855,6 +855,7 @@ var __SITES = {
     "url": "https://git.nyne.dev/nyne/venera-configs/raw/branch/main/comic_walker.js"
   }
 };
+var __AUTO_SITES = ["baozi","manhuagui","copy_manga","zaimanhua","manhuaren","ykmh"];
 var __DEFAULT_SITE = "baozi";
 
 var ComicSource = VeneraRuntime.ComicSource;
@@ -998,8 +999,9 @@ function __domainOptions(inst) {
   return out;
 }
 
-/** 多线路重试：一个域名挂了就换下一个，再不行换 cn/tw */
-function __withMirrors(siteKey, fn) {
+/** 多线路重试：一个域名挂了就换下一个，再不行换 cn/tw。maxTries 可限制尝试次数 */
+function __withMirrors(siteKey, fn, maxTries) {
+  var budget = (typeof maxTries === "number" && maxTries > 0) ? maxTries : 9999;
   try {
     return fn();
   } catch (firstError) {
@@ -1012,6 +1014,8 @@ function __withMirrors(siteKey, fn) {
     var errors = [String(firstError)];
     for (var li = 0; li < langs.length; li++) {
       for (var di = 0; di < domains.length; di++) {
+        if (budget <= 0) { li = langs.length; break; }
+        budget--;
         try {
           if (inst.settings.language) { inst.settings.language.default = langs[li]; }
           inst.settings.domains.default = domains[di];
@@ -1024,6 +1028,29 @@ function __withMirrors(siteKey, fn) {
     }
     throw new Error(__SITES[siteKey].name + " 所有线路都失败：" + errors.slice(0, 5).join(" | "));
   }
+}
+
+/** 不带站点前缀时，依次试这几个主站，谁先出结果就用谁（每站最多切 2 次线路） */
+function __searchAuto(keyword, page) {
+  var tried = [];
+  for (var i = 0; i < __AUTO_SITES.length; i++) {
+    var key = __AUTO_SITES[i];
+    if (!__SITES[key]) { continue; }
+    try {
+      var items = __withMirrors(key, function () {
+        return __searchOn(key, keyword, page);
+      }, 2);
+      if (items && items.length > 0) {
+        console.log("[venera] 自动选站：" + __SITES[key].name + " 出了 " + items.length + " 条");
+        return items;
+      }
+      tried.push(__SITES[key].name + "：0 条");
+    } catch (e) {
+      tried.push(__SITES[key].name + "：" + String(e).slice(0, 40));
+    }
+  }
+  throw new Error("自动选站没搜到「" + keyword + "」\n" + tried.join("\n") +
+    "\n提示：可以在关键词前指定站点，例如「baozi " + keyword + "」");
 }
 
 function __abs(url, inst) {
@@ -1109,7 +1136,7 @@ function __parseQuery(query) {
   if (text && __SITES[text]) {
     return { site: text, keyword: "" };
   }
-  return { site: __DEFAULT_SITE, keyword: text };
+  return { site: __DEFAULT_SITE, keyword: text, auto: true };
 }
 
 function __searchOn(siteKey, keyword, page) {
@@ -1181,6 +1208,10 @@ function __pagesOn(siteKey, realID, chapterID) {
 
 function __search(query, page) {
   var parsed = __parseQuery(query);
+  if (parsed.auto) {
+    console.log("[venera] 未指定站点，自动选站搜「" + parsed.keyword + "」");
+    return __searchAuto(parsed.keyword, page);
+  }
   return __withMirrors(parsed.site, function () {
     return __searchOn(parsed.site, parsed.keyword, page);
   });
@@ -1211,7 +1242,7 @@ var source = {
   id: "venera",
   name: "Venera 多源（20 站）",
   lang: "zh",
-  version: 2,
+  version: 3,
   baseUrl: "",
   icon: "",
   search: __search,
