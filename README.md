@@ -9,41 +9,78 @@
 
 ---
 
-## 怎么用（推荐：链接导入）
+## 首选：单文件总源（一次导入，20 站）
 
-App 里「设置 → 图源 → **粘贴链接导入**」，粘下面对应的地址：
+**`venera-all.js`** —— 一个文件里塞了 20 个站点，按搜索词前缀路由。
 
-| 源 | 导入地址 |
+装好之后，在「发现」页搜索框里这样用：
+
+| 你输入 | 结果 |
 |---|---|
-| 包子漫画 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/baozi.js` |
-| 拷贝漫画 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/copy_manga.js` |
-| 漫画柜 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/manhuagui.js` |
-| 漫画人 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/manhuaren.js` |
-| 再漫画 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/zaimanhua.js` |
-| 爱看漫 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/ikmmh.js` |
-| 优酷漫画 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/ykmh.js` |
-| 漫画1234 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/mh1234.js` |
-| 漫小肆 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/mxs.js` |
-| GoDa漫画 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/goda.js` |
-| 热辣漫画 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/hot_manga.js` |
-| 嗨皮漫画 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/happy.js` |
-| CCC追漫台 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/ccc.js` |
-| 漫蛙吧 | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/manwaba.js` |
-| jcomic | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/jcomic.js` |
-| Komiic | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/komiic.js` |
-| MangaDex | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/manga_dex.js` |
-| comick | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/comick.js` |
-| 少年ジャンプ＋ | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/shonen_jump_plus.js` |
-| カドコミ | `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/comic_walker.js` |
+| `baozi 海贼` | 包子漫画搜「海贼」 |
+| `copy_manga 恋爱` | 拷贝漫画搜「恋爱」 |
+| `manhuagui 进击` | 漫画柜搜「进击」 |
+| `海贼`（不带前缀） | 默认站点（包子漫画）搜「海贼」 |
+| `?` | 弹出可用站点一览 |
 
-> jsDelivr 有缓存（约 12 小时）。改了源想立刻生效，把地址里的 `@main` 换成具体 commit 短哈希即可。
+前缀也可以写冒号：`baozi:海贼`。
 
-也支持「粘贴代码导入」和「从「文件」导入」：直接把这个文件的内容或文件本身喂给 App。
+### 可用站点 key
+
+```
+baozi          包子漫画        copy_manga      拷贝漫画
+manhuagui      漫画柜          manhuaren       漫画人
+zaimanhua      再漫画          ikmmh           爱看漫
+ykmh           优酷漫画        mh1234          漫画1234
+mxs            漫小肆          goda            GoDa漫画
+hot_manga      热辣漫画        happy           嗨皮漫画
+ccc            CCC追漫台       manwaba         漫蛙吧
+jcomic         jcomic.net      komiic          Komiic
+manga_dex      MangaDex        comick          comick
+shonen_jump_plus 少年ジャンプ＋ comic_walker    カドコミ
+```
+
+### 导入方式（哪个能通就用哪个）
+
+1. **粘贴代码**：打开本页的 `venera-all.js` → 右上角复制图标（Copy raw file）→ App「设置 → 图源 → 粘贴代码导入」→ 文件名 `venera-all.js`
+2. **从文件导入**：把 `venera-all.js` 下载到「文件」App → App「从「文件」导入 .js」
+3. **链接导入**（需要 CDN 可访问，国内常被掐）：
+   - `https://cdn.jsdelivr.net/gh/Zh192314/fishmanga-sources@main/venera-all.js`
+   - `https://cdn.statically.io/gh/Zh192314/fishmanga-sources/main/venera-all.js`
+
+---
+
+## 备选：单站源（一个站一个文件）
+
+如果只想要某个站，也可以单独导入：
+
+| 源 | 文件 |
+|---|---|
+| 包子漫画 | `baozi.js` |
+| 拷贝漫画 | `copy_manga.js` |
+| 漫画柜 | `manhuagui.js` |
+| 漫画人 | `manhuaren.js` |
+| 再漫画 | `zaimanhua.js` |
+| 爱看漫 | `ikmmh.js` |
+| 优酷漫画 | `ykmh.js` |
+| 漫画1234 | `mh1234.js` |
+| 漫小肆 | `mxs.js` |
+| GoDa漫画 | `goda.js` |
+| 热辣漫画 | `hot_manga.js` |
+| 嗨皮漫画 | `happy.js` |
+| CCC追漫台 | `ccc.js` |
+| 漫蛙吧 | `manwaba.js` |
+| jcomic | `jcomic.js` |
+| Komiic | `komiic.js` |
+| MangaDex | `manga_dex.js` |
+| comick | `comick.js` |
+| 少年ジャンプ＋ | `shonen_jump_plus.js` |
+| カドコミ | `comic_walker.js` |
 
 ---
 
 ## 注意
 
 - 这些源指向的站点内容版权归原站与作者所有，仅供个人学习研究。
-- 站点改版、反爬升级都会让对应源失效，这与 App 无关。
-- 源的实现（兼容层）在主工程的 `tools/venera/` 下，用 `node tools/venera/build_all.mjs` 重新生成。
+- 站点改版、反爬升级都会让对应源失效，这与 App 无关；`设置 → 源调试日志` 里能看到具体报错。
+- 兼容层实现在主工程 `tools/venera/` 下，重新生成用 `node tools/venera/build_all.mjs` 与 `node tools/venera/build_multi.mjs`。
